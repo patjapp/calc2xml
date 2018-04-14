@@ -1,0 +1,132 @@
+#!/bin/bash
+set -euo pipefail
+
+
+function die {
+    printf "%s\n" "${1:-}" 1>&2
+    exit 1
+}
+
+
+function main {
+    
+    check_dependency "xmllint"
+    check_dependency "xsltproc"
+    check_dependency "unzip"
+    check_dependency "file"
+    
+    local base_dir="$( pwd )"
+    local lib_dir="$base_dir"
+    local xsl="$lib_dir/ods2xml.xsl"
+    local debug="no"
+    local verbose="-qq"
+    local top_name="CALC"
+    local row_name="ROW"
+    local out=""
+    
+    OPTIND=1
+    while getopts "t:r:o:dh" opt ;do
+        case $opt in
+            h) usage                   ;;
+            d) debug="yes"; verbose="" ;;
+            o) out="$OPTARG"           ;;
+            t) top_name="$OPTARG"      ;;
+            r) row_name="$OPTARG"      ;;
+        esac
+    done
+
+    shift $((OPTIND-1))
+    local ods="${1:-}"
+
+    [[ -f "$ods" ]] || die "ERROR no input file"
+    [[ -z "$out" ]] && out="${ods}.xml"
+
+    check_file "$xsl" "XML 1.0"
+    check_file "$ods" "OpenDocument Spreadsheet"
+
+    local date="$( date +"%Y-%m-%dT%H:%M:%S%z" )"
+    local tmp_dir="$( mktemp -d "tmp_${ods}_${date}_XXXX" )"
+    
+    prepare_ods   "$tmp_dir" "$ods"   "$verbose" 
+    transform_ods "$tmp_dir" "$debug" "$xsl" "$out" "$top_name" "$row_name" "$date"
+    clean_up      "$tmp_dir" "$debug"
+    
+    return 0
+}
+
+
+function usage {
+    local indent=22
+    printf "\nUsage: %s %s %s\n\n" "$0" "[-d] [-h] [-o output-file] [-t root-element-name] [-r row-element-name]" "ods-file"
+    printf "%${indent}s :%s\n" "Description"  "Converter for converting ODS files to XML."
+    printf "%${indent}s :%s\n" "Author"       "Patrick Jappsen <patrick.jappsen@digidrom.de>, https://github.com/patjapp/calc2xml"
+    printf "%${indent}s :%s\n" "Dependencies" "LibXml2 et al"
+    printf "\nOptions:\n"
+    printf "  %-$((${indent}-2))s :%s\n" "-d"                   "Debug mode; keeps a temporary folder with the unpacked ODS file."
+    printf "  %-$((${indent}-2))s :%s\n" "-h"                   "This help."
+    printf "  %-$((${indent}-2))s :%s\n" "-o output-file"       "Name of the output file (default: >ods-file.xml<)."
+    printf "  %-$((${indent}-2))s :%s\n" ""                     "CAUTION: already existing files with the same output name will be overwritten!"
+    printf "  %-$((${indent}-2))s :%s\n" "-r row-element-name"  "Name of the row elements of the output XML (default: <ROW>)."
+    printf "  %-$((${indent}-2))s :%s\n" "-t root-element-name" "Name of the root element of the output XML (default: <CALC>)."
+    echo
+}
+
+
+function check_dependency {
+    which "$1" 2>/dev/null 1>&2 || die "ERROR can't find dependency >$1<"
+    return 0
+}
+
+
+function check_file {
+    file "$1" |grep -q "$2" || die "ERROR can't find $2 file >$1<"
+    return 0
+}
+
+
+function prepare_ods {
+    local tmp_dir="$1"
+    local ods_src="$2"
+    local verbose="$3"
+    
+    cp "$ods_src" $tmp_dir/
+    (
+        cd $tmp_dir
+        unzip $verbose "$ods_src" 1>&2
+    )
+    
+    return 0
+}
+
+
+function transform_ods {
+    local tmp_dir="$1"
+    local debug="$2"
+    local xsl="$3"
+    local out="$4"
+    local top_name="$5"
+    local row_name="$6"
+    local date="$7"
+    
+    xsltproc \
+        --output      "$out" \
+        --stringparam topLevelName            "$top_name" \
+        --stringparam topLevelAttribute       "date" \
+        --stringparam topLevelAttributeValue  "$date" \
+        --stringparam rowName                 "$row_name" \
+        "$xsl" "$tmp_dir/content.xml" \
+        && echo "created >$out<" 1>&2 \
+        && [[ "$debug" == "yes" ]] && echo "and temp dir >./$tmp_dir/<" 1>&2
+    
+    return 0
+}
+
+
+function clean_up {
+    [[ "$2" == "yes" ]] || rm -Rf "$1"
+    return 0
+}
+
+
+main "$@"
+exit 0
