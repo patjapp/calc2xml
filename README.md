@@ -9,6 +9,6 @@ The first row of the output table must contain unique column identifiers: Cell $
 
 There must not be an empty column up to the last filled column.
 
-A table with, for example, five columns must therefore fill the columns $A$ to $E$ and the cells $A1$ to $E1$ must contain different identifiers.
+A table with, e.g., five columns must therefore fill the columns $A$ to $E$ and the cells $A1$ to $E1$ must contain different identifiers.
 
 The cells $A2$, $A3$, … contain data associated with the identifier in the $A1$ cell, the cells $B2$, $B3$, … according to data associated with the identifier in the $B1$ cell, aso. up to the $E2$, … cells containing data associated with the identifier in the $E1$ cell.
